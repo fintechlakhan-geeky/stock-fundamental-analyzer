@@ -23,6 +23,9 @@ Tools exposed to Claude:
   search_shareholder          — find bulk deal activity by investor name
   get_commodity_prices        — commodity price context and company impact analysis
   notebook_ai                 — save and summarize investment research notes
+  generate_fundamental_report — end-to-end analysis + 14-sheet Excel report with charts
+  export_fundamental_excel    — export 14-worksheet fundamental Excel model
+  get_financial_analysis      — transparent 0-100 scoring & growth/ratio analysis
 
 Resources:
   screener://analyst-guide    — how to use this assistant
@@ -75,6 +78,8 @@ from .tools.announcements import get_company_announcements as _get_announcements
 from .tools.shareholders import search_shareholder as _search_shareholder
 from .tools.commodities import get_commodity_prices as _get_commodity_prices
 from .tools.notebook import notebook_ai as _notebook_ai
+from .analysis.financial_analysis import run_comprehensive_analysis as _run_analysis
+from .export.excel_report import export_fundamental_excel_report as _export_excel
 
 def _safe(result):
     """Wrap a coroutine so network/auth errors become readable messages."""
@@ -783,6 +788,89 @@ else:
 def stock_comparison_ui() -> str:
     """Stock Comparison Dashboard — interactive UI for comparing multiple stocks."""
     return _ui_bundle
+
+
+# ─── Fundamental Analysis & Reporting Tools ───────────────────────────────────
+
+@mcp.tool()
+async def generate_fundamental_report(
+    symbol: str,
+    financial_type: str = "consolidated",
+) -> str:
+    """
+    Generate an end-to-end fundamental analysis report for an Indian stock,
+    and automatically create a 14-sheet Excel financial model with embedded charts.
+
+    Returns the executive scorecard, strengths, weaknesses, red flags, and the path
+    to the generated Excel workbook (<SYMBOL>_Fundamental_Analysis.xlsx).
+
+    symbol: NSE or BSE stock ticker (e.g. TCS, RELIANCE, INFY, HDFCBANK)
+    financial_type: "consolidated" (default) or "standalone"
+    """
+    try:
+        analysis = await _run_analysis(symbol, financial_type=financial_type)
+        out_filename = f"{symbol.upper()}_Fundamental_Analysis.xlsx"
+        excel_path = _export_excel(analysis, out_filename)
+        md = analysis.to_markdown_summary()
+        return (
+            f"{md}\n\n"
+            f"### [Excel Model] Financial Workbook Generated\n"
+            f"- **File Location**: `{excel_path}`\n"
+            f"- **Worksheets (14)**: Summary, Company Overview, P&L, Balance Sheet, Cash Flow, "
+            f"Quarterly Results, Ratios, Growth Analysis, Valuation, Shareholding, Peer Comparison, "
+            f"Red Flags, Charts (11 figures), Raw Data."
+        )
+    except Exception as e:
+        return f"Error generating fundamental report for {symbol.upper()}: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def export_fundamental_excel(
+    symbol: str,
+    output_path: str = "",
+    financial_type: str = "consolidated",
+) -> str:
+    """
+    Export a comprehensive 14-worksheet Fundamental Analysis Excel report for a stock.
+    Includes Summary Dashboard, Company Overview, P&L, Balance Sheet, Cash Flow,
+    Quarterly Results, Ratios, Growth Analysis, Valuation, Shareholding, Peer Comparison,
+    Red Flags, 11 Embedded Charts, and Raw Data.
+
+    Returns the absolute path of the generated Excel workbook.
+
+    symbol: NSE or BSE stock ticker (e.g. TCS, RELIANCE, INFY, HDFCBANK)
+    output_path: optional custom file path (defaults to <SYMBOL>_Fundamental_Analysis.xlsx)
+    financial_type: "consolidated" (default) or "standalone"
+    """
+    try:
+        analysis = await _run_analysis(symbol, financial_type=financial_type)
+        if not output_path:
+            output_path = f"{symbol.upper()}_Fundamental_Analysis.xlsx"
+        path = _export_excel(analysis, output_path)
+        return f"Successfully generated 14-worksheet Fundamental Analysis Excel model: {path}"
+    except Exception as e:
+        return f"Error exporting Excel for {symbol.upper()}: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def get_financial_analysis(
+    symbol: str,
+    financial_type: str = "consolidated",
+) -> str:
+    """
+    Get a complete structured fundamental analysis for an Indian stock without generating an Excel file.
+    Includes transparent 0-100 scores across 6 pillars (Profitability, Growth, Balance Sheet,
+    Cash Flow, Valuation, Shareholding), CAGR calculations, ratio trends, forensic red flags,
+    and key investment strengths/weaknesses.
+
+    symbol: NSE or BSE stock ticker (e.g. TCS, RELIANCE, INFY, HDFCBANK)
+    financial_type: "consolidated" (default) or "standalone"
+    """
+    try:
+        analysis = await _run_analysis(symbol, financial_type=financial_type)
+        return analysis.to_markdown_summary()
+    except Exception as e:
+        return f"Error analyzing {symbol.upper()}: {type(e).__name__}: {e}"
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────

@@ -154,6 +154,11 @@ def parse_overview(html: str) -> dict[str, Any]:
                     val_span = li.find("span", class_=lambda c: c and "value" in str(c).lower())
                 ratios[key] = _clean(val_span.get_text()) if val_span else ""
 
+    # Warehouse ID & Company ID
+    info_tag = soup.find(id="company-info")
+    warehouse_id = info_tag.get("data-warehouse-id", "") if info_tag else ""
+    company_id = info_tag.get("data-company-id", "") if info_tag else ""
+
     # Current price is rendered inside top-ratios, not a separate element
     price = ratios.pop("Current Price", "")
 
@@ -167,6 +172,8 @@ def parse_overview(html: str) -> dict[str, Any]:
         "52_week_high": high_52,
         "52_week_low": low_52,
         "key_ratios": ratios,
+        "warehouse_id": warehouse_id,
+        "company_id": company_id,
     }
 
 
@@ -256,6 +263,31 @@ def parse_peers(html: str) -> list[dict[str, str]]:
     return []
 
 
+def parse_compounding(html: str) -> dict[str, dict[str, str]]:
+    """Parse Screener's compounding tables (Sales Growth, Profit Growth, Stock CAGR, ROE)."""
+    soup = BeautifulSoup(html, "lxml")
+    pl = soup.find(id="profit-loss")
+    if not pl:
+        return {}
+    res = {}
+    for table in pl.find_all("table"):
+        th = table.find("th")
+        if not th:
+            continue
+        title = _clean(th.get_text())
+        if any(k in title.lower() for k in ["compounded", "cagr", "return on equity"]):
+            metrics = {}
+            for tr in table.find_all("tr"):
+                tds = tr.find_all(["td", "th"])
+                if len(tds) >= 2:
+                    k = _clean(tds[0].get_text()).rstrip(":")
+                    v = _clean(tds[1].get_text())
+                    metrics[k] = v
+            if metrics:
+                res[title] = metrics
+    return res
+
+
 def parse_full_page(html: str) -> dict[str, Any]:
     """Parse everything from a single page load."""
     return {
@@ -267,4 +299,5 @@ def parse_full_page(html: str) -> dict[str, Any]:
         "ratios_history": parse_ratios(html),
         "shareholding": parse_shareholding(html),
         "peers": parse_peers(html),
+        "compounding": parse_compounding(html),
     }
